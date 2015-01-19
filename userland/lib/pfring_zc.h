@@ -153,7 +153,7 @@ pfring_zc_create_queue(
 /**
  * Read the next packet from the queue.
  * @param queue                    The queue handle.
- * @param pkt_handle               The pointer to the buffer handle for the received buffer. The buffer handle must have been allocated earlier with get_packet_handle()/get_packet_handle_from_queue().
+ * @param pkt_handle               The pointer to the buffer handle for the received buffer. The buffer handle must have been allocated earlier with get_packet_handle()/get_packet_handle_from_pool().
  * @param wait_for_incoming_packet The flag indicating whether this call is blocking or not.
  * @return                         1 on success, 0 on empty queue (non-blocking only), a negative value otherwise.
  */
@@ -167,7 +167,7 @@ pfring_zc_recv_pkt(
 /**
  * Read a burst of packets from the queue.
  * @param queue                    The queue handle.
- * @param pkt_handles              The array with the buffer handles for the received buffers. The buffer handles must have been allocated earlier with get_packet_handle()/get_packet_handle_from_queue().
+ * @param pkt_handles              The array with the buffer handles for the received buffers. The buffer handles must have been allocated earlier with get_packet_handle()/get_packet_handle_from_pool().
  * @param max_num_packets          The maximum number of packets to read from the queue.
  * @param wait_for_incoming_packet The flag indicating whether this call is blocking or not.
  * @return                         The number of received packets on success, 0 on empty queue (non-blocking only), a negative value otherwise.
