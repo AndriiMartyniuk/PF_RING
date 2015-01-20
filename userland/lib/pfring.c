@@ -704,7 +704,7 @@ int pfring_set_channel_id(pfring *ring, u_int32_t channel_id) {
 
 /* **************************************************** */
 
-int pfring_set_channel_mask(pfring *ring, u_int32_t channel_mask) {
+int pfring_set_channel_mask(pfring *ring, u_int64_t channel_mask) {
   if(ring && ring->set_channel_mask)
     return ring->set_channel_mask(ring, channel_mask);
 

@@ -248,8 +248,8 @@ int pfring_mod_open(pfring *ring) {
 
 /* ******************************* */
 
-int pfring_mod_set_channel_mask(pfring *ring, u_int32_t channel_mask) {
-  return(setsockopt(ring->fd, 0, SO_SET_CHANNEL_ID, &channel_mask, sizeof(channel_mask)));
+int pfring_mod_set_channel_mask(pfring *ring, u_int64_t channel_mask64) {
+  return(setsockopt(ring->fd, 0, SO_SET_CHANNEL_ID, &channel_mask64, sizeof(channel_mask64)));
 }
 
 /* ******************************* */
@@ -292,7 +292,7 @@ char* pfring_mod_get_appl_stats_file_name(pfring *ring, char *path, u_int path_l
 int pfring_mod_bind(pfring *ring, char *device_name) {
   struct sockaddr sa;
   char *at, *elem, *pos, name_copy[256];
-  u_int32_t channel_mask = RING_ANY_CHANNEL;
+  u_int64_t channel_mask = RING_ANY_CHANNEL;
   int rc = 0;
 
   if((device_name == NULL) || (strcmp(device_name, "none") == 0))

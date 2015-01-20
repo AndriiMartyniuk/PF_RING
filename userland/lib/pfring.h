@@ -228,7 +228,7 @@ struct __pfring {
   int       (*set_poll_duration)            (pfring *, u_int);
   int       (*set_tx_watermark)             (pfring *, u_int16_t);
   int       (*set_channel_id)               (pfring *, u_int32_t);
-  int       (*set_channel_mask)             (pfring *, u_int32_t);
+  int       (*set_channel_mask)             (pfring *, u_int64_t);
   int       (*set_application_name)         (pfring *, char *);
   int       (*set_application_stats)        (pfring *, char *);
   char*     (*get_appl_stats_file_name)     (pfring *ring, char *path, u_int path_len);
@@ -538,7 +538,7 @@ int pfring_set_channel_id(pfring *ring, u_int32_t channel_id);
  * @param channel_mask The channel mask.
  * @return 0 on success, a negative value otherwise.
  */
-int pfring_set_channel_mask(pfring *ring, u_int32_t channel_mask);
+int pfring_set_channel_mask(pfring *ring, u_int64_t channel_mask);
 
 /**
  * Tell PF_RING the name of the application (usually argv[0]) that uses this ring. This information is used to identify the application 

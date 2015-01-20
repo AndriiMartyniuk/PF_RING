@@ -767,9 +767,8 @@ typedef struct {
 
 /* ************************************************* */
 
-#define RING_ANY_CHANNEL          ((u_int32_t)-1)
-#define UNKNOWN_RX_CHANNEL        RING_ANY_CHANNEL
-#define MAX_NUM_RX_CHANNELS       32 /* channel_id_mask is a 32 bit mask */
+#define RING_ANY_CHANNEL          ((u_int64_t)-1)
+#define MAX_NUM_RX_CHANNELS       64 /* channel_id_mask is a 64 bit mask */
 #define UNKNOWN_NUM_RX_CHANNELS   1
 
 /* ************************************************* */
@@ -922,10 +921,12 @@ typedef struct {
 
 
 typedef struct {
-  /* DNA */
-  u_int num_zc_dev_rx_queues; /* 0 for non DNA devices */
+  /* ZC/DNA */
   u_int8_t is_zc_device;
   zc_dev_model zc_dev_model;
+  u_int num_zc_dev_rx_queues; /* 0 for non ZC/DNA devices */
+  u_int32_t num_zc_rx_slots;
+  u_int32_t num_zc_tx_slots;
 
   pfring_device_type device_type; /* Device Type */
 
@@ -1112,7 +1113,7 @@ struct pf_ring_socket {
   u_int16_t cluster_id /* 0 = no cluster */;
 
   /* Channel */
-  int32_t channel_id_mask;  /* -1 = any channel */
+  int64_t channel_id_mask;  /* -1 = any channel */
   u_int16_t num_channels_per_ring;
 
   /* rehash rss function pointer */
@@ -1358,7 +1359,7 @@ extern void do_ring_zc_dev_handler(zc_dev_operation operation,
 
 typedef int (*handle_ring_skb)(struct sk_buff *skb, u_char recv_packet,
 			       u_char real_skb, u_int8_t *skb_reference_in_use,
-			       u_int32_t channel_id,
+			       int32_t channel_id,
 			       u_int32_t num_rx_channels);
 typedef int (*handle_ring_buffer)(struct net_device *dev,
 				  char *data, int len);

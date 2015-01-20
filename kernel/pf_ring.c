@@ -327,7 +327,7 @@ static struct proto ring_proto;
 
 static int skb_ring_handler(struct sk_buff *skb, u_char recv_packet,
 			    u_int8_t real_skb, u_int8_t *skb_reference_in_use,
-			    u_int32_t channel_id, u_int32_t num_rx_channels);
+			    int32_t channel_id, u_int32_t num_rx_channels);
 static int buffer_ring_handler(struct net_device *dev, char *data, int len);
 static int remove_from_cluster(struct sock *sock, struct pf_ring_socket *pfr);
 static int pfring_map_zc_dev(struct pf_ring_socket *pfr,
@@ -1086,6 +1086,11 @@ static int ring_proc_dev_get_info(struct seq_file *m, void *data_not_used)
 
     seq_printf(m, "# Used RX Queues:  %d\n",
 	       dev_ptr->is_zc_device ? dev_ptr->num_zc_dev_rx_queues : get_num_rx_queues(dev));
+
+    if(dev_ptr->is_zc_device) {
+      seq_printf(m, "Num RX Slots:      %d\n", dev_ptr->num_zc_rx_slots);
+      seq_printf(m, "Num TX Slots:      %d\n", dev_ptr->num_zc_tx_slots);
+    }	
   }
 
   return(0);
@@ -1528,7 +1533,7 @@ static int ring_proc_get_info(struct seq_file *m, void *data_not_used)
 	}
       } else if(fsi != NULL) {
         /* Standard PF_RING */
-	seq_printf(m, "Channel Id Mask    : 0x%08X\n", pfr->channel_id_mask);
+	seq_printf(m, "Channel Id Mask    : 0x%016llX\n", pfr->channel_id_mask);
 	seq_printf(m, "Cluster Id         : %d\n", pfr->cluster_id);
 	seq_printf(m, "Slot Version       : %d [%s]\n", fsi->version, RING_VERSION);
 	seq_printf(m, "Min Num Slots      : %d\n", fsi->min_num_slots);
@@ -3044,22 +3049,22 @@ static inline int add_pkt_to_ring(struct sk_buff *skb,
 			   u_int8_t real_skb,
 			   struct pf_ring_socket *_pfr,
 			   struct pfring_pkthdr *hdr,
-			   int displ, u_int32_t channel_id,
+			   int displ, int channel_id,
 			   int offset, void *plugin_mem,
 			   int *clone_id)
 {
   struct pf_ring_socket *pfr = (_pfr->master_ring != NULL) ? _pfr->master_ring : _pfr;
-  u_int32_t the_bit = 1 << channel_id;
+  u_int64_t the_bit = 1 << channel_id;
 
   //if(unlikely(enable_debug))
-  //  printk("[PF_RING] --> add_pkt_to_ring(len=%d) [pfr->channel_id_mask=%08X][channel_id=%d][real_skb=%u]\n",
+  //  printk("[PF_RING] --> add_pkt_to_ring(len=%d) [pfr->channel_id_mask=%16X][channel_id=%d][real_skb=%u]\n",
   //	   hdr->len, pfr->channel_id_mask, channel_id, real_skb);
 
   if((!pfr->ring_active) || (!skb))
     return(0);
 
   if((pfr->channel_id_mask != RING_ANY_CHANNEL)
-     && (channel_id != RING_ANY_CHANNEL)
+     && (channel_id != -1 /* any channel */)
      && (!(pfr->channel_id_mask & the_bit)))
     return(0); /* Wrong channel */
 
@@ -3093,7 +3098,7 @@ static int add_packet_to_ring(struct pf_ring_socket *pfr,
   }
 
   ring_read_lock();
-  add_pkt_to_ring(skb, real_skb, pfr, hdr, 0, RING_ANY_CHANNEL, displ, NULL, NULL);
+  add_pkt_to_ring(skb, real_skb, pfr, hdr, 0, -1 /* any channel */, displ, NULL, NULL);
   ring_read_unlock();
   return(0);
 }
@@ -3995,8 +4000,8 @@ static int add_skb_to_ring(struct sk_buff *skb,
 			   struct pf_ring_socket *pfr,
 			   struct pfring_pkthdr *hdr,
 			   int is_ip_pkt, int displ,
-			   u_int8_t channel_id,
-			   u_int8_t num_rx_channels,
+			   int channel_id,
+			   u_int32_t num_rx_channels,
 			   int *clone_id)
 {
   int fwd_pkt = 0, rc = 0;
@@ -4434,7 +4439,7 @@ static int skb_ring_handler(struct sk_buff *skb,
 			    /* This return value is set to 1 in case
 			       the input skb is in use by PF_RING and thus
 			       the caller should NOT free it */
-			    u_int32_t channel_id,
+			    int32_t channel_id,
 			    u_int32_t num_rx_channels)
 {
   struct sock *skElement;
@@ -4486,7 +4491,7 @@ static int skb_ring_handler(struct sk_buff *skb,
 #endif
 
 #if(LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,30))
-  if(channel_id == UNKNOWN_RX_CHANNEL)
+  if(channel_id == -1 /* unknown: any channel */)
     channel_id = skb_get_rx_queue(skb);
 #endif
 
@@ -4765,7 +4770,7 @@ static int buffer_ring_handler(struct net_device *dev, char *data, int len)
 
   return(skb_ring_handler(&skb, 1, 0 /* fake skb */,
 			  &skb_reference_in_use,
-			  UNKNOWN_RX_CHANNEL,
+			  -1 /* unknown: any channel */,
 			  UNKNOWN_NUM_RX_CHANNELS));
 }
 
@@ -4785,7 +4790,8 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
     rc = skb_ring_handler(skb,
 			  (skb->pkt_type == PACKET_OUTGOING) ? 0 : 1,
 			  1 /* real_skb */, &skb_reference_in_use,
-			  UNKNOWN_RX_CHANNEL, UNKNOWN_NUM_RX_CHANNELS);
+			  -1 /* unknown: any channel */,
+                          UNKNOWN_NUM_RX_CHANNELS);
 
   } else
     rc = 0;
@@ -5846,7 +5852,7 @@ static int ring_release(struct socket *sock)
 	num_rings_per_device[pfr->ring_netdev->dev->ifindex]--;
 
       for(i=0; i<MAX_NUM_RX_CHANNELS; i++) {
-	u_int32_t the_bit = 1 << i;
+	u_int64_t the_bit = 1 << i;
 
 	if(pfr->channel_id_mask & the_bit) {
 	  if(device_rings[pfr->ring_netdev->dev->ifindex][i] == pfr) {
@@ -7376,7 +7382,7 @@ static int ring_setsockopt(struct socket *sock,
   int found, ret = 0 /* OK */, i;
   u_int32_t ring_id;
   struct add_to_cluster cluster;
-  u_int32_t channel_id_mask;
+  u_int64_t channel_id_mask;
   char applName[32 + 1] = { 0 };
   u_int16_t rule_id, rule_inactivity;
   packet_direction direction;
@@ -7526,7 +7532,7 @@ static int ring_setsockopt(struct socket *sock,
 
     if(quick_mode) {
       for(i=0; i<pfr->num_rx_channels; i++) {
-        u_int32_t the_bit = 1 << i;
+        u_int64_t the_bit = 1 << i;
 
         if(channel_id_mask & the_bit) {
 	  if(device_rings[pfr->ring_netdev->dev->ifindex][i] != NULL)
@@ -7538,7 +7544,7 @@ static int ring_setsockopt(struct socket *sock,
     /* Everything seems to work thus let's set the values */
 
     for(i=0; i<pfr->num_rx_channels; i++) {
-      u_int32_t the_bit = 1 << i;
+      u_int64_t the_bit = 1 << i;
 
       if(channel_id_mask & the_bit) {
         if(unlikely(enable_debug)) printk("[PF_RING] Setting channel %d\n", i);
@@ -7553,7 +7559,7 @@ static int ring_setsockopt(struct socket *sock,
 
     pfr->channel_id_mask = channel_id_mask;
     if(unlikely(enable_debug))
-      printk("[PF_RING] [pfr->channel_id_mask=%08X][channel_id_mask=%08X]\n",
+      printk("[PF_RING] [pfr->channel_id_mask=%016llX][channel_id_mask=%016llX]\n",
 	     pfr->channel_id_mask, channel_id_mask);
 
     ret = 0;
@@ -8890,8 +8896,11 @@ void zc_dev_handler(zc_dev_operation operation,
 	  ring_device_element *dev_ptr = list_entry(ptr, ring_device_element, device_list);
 
 	  if(strcmp(dev_ptr->device_name, netdev->name) == 0) {
+	    dev_ptr->is_zc_device = 1 + version;
+            dev_ptr->zc_dev_model = device_model;
 	    dev_ptr->num_zc_dev_rx_queues = max_val(dev_ptr->num_zc_dev_rx_queues, channel_id+1);
-	    dev_ptr->is_zc_device = 1 + version, dev_ptr->zc_dev_model = device_model;
+            if (rx_info != NULL) dev_ptr->num_zc_rx_slots = rx_info->packet_memory_num_slots;
+            if (tx_info != NULL) dev_ptr->num_zc_tx_slots = tx_info->packet_memory_num_slots;
 
 	    if(unlikely(enable_debug))
 	      printk("[PF_RING] ==>> Updating DNA %s [num_zc_dev_rx_queues=%d][%p]\n",
@@ -9213,7 +9222,7 @@ int pf_ring_inject_packet_to_ring(int if_index, int channel_id, u_char *data, in
   struct sock* sk = NULL;
   u_int32_t last_list_idx;
   struct pf_ring_socket *pfr;
-  u_int32_t the_bit = 1 << channel_id;
+  u_int64_t the_bit = 1 << channel_id;
   int rc = -2; /* -2 == socket not found */
 
   if(quick_mode) {
@@ -9227,7 +9236,7 @@ int pf_ring_inject_packet_to_ring(int if_index, int channel_id, u_char *data, in
 
       if(pfr != NULL
           && (test_bit(if_index, pfr->netdev_mask) /* || pfr->ring_netdev == &any_device_element */ )
-          && ((pfr->channel_id_mask & the_bit) || channel_id == RING_ANY_CHANNEL)) {
+          && ((pfr->channel_id_mask & the_bit) || channel_id == -1 /* any channel */)) {
         /* 0  == success, -1 == no room available */
         rc = add_raw_packet_to_ring(pfr, hdr, data, data_len, 0);
       }
